@@ -5,10 +5,7 @@ import { Message } from 'discord.js';
 
 @Injectable()
 export class DiscordAccessService {
-  constructor(
-    private readonly discordService: DiscordService
-  ) {
-  }
+  constructor(private readonly discordService: DiscordService) {}
 
   isAllowCommand(
     commandName: string,
@@ -20,7 +17,8 @@ export class DiscordAccessService {
       if (item.name !== commandName) {
         return true;
       }
-      let isAllowDirect = true, isAllowChannel = true;
+      let isAllowDirect = true,
+        isAllowChannel = true;
       if (item.users && item.users.length !== 0) {
         isAllowDirect = item.users.includes(userId);
       }
@@ -31,9 +29,7 @@ export class DiscordAccessService {
     });
   }
 
-  isAllowMessageGuild(
-    message: Message,
-  ): boolean {
+  isAllowMessageGuild(message: Message): boolean {
     const guildId = message.guild && message.guild.id;
     if (!!guildId) {
       return this.discordService.isAllowGuild(guildId);

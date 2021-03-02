@@ -29,19 +29,23 @@ export class OnCommandResolver implements MethodResolver {
 
   resolve(options: MethodResolveOptions): void {
     const { instance, methodName } = options;
-    const metadata = this.metadataProvider.getOnCommandDecoratorMetadata(instance, methodName);
+    const metadata = this.metadataProvider.getOnCommandDecoratorMetadata(
+      instance,
+      methodName,
+    );
     if (!metadata) {
       return;
     }
     const {
       name,
+      regex,
       prefix = this.discordService.getCommandPrefix(),
       isRemovePrefix = true,
       isIgnoreBotMessage = true,
       isRemoveCommandName = true,
       isRemoveMessage = false,
       allowChannels,
-      allowUsers
+      allowUsers,
     } = metadata;
     this.discordService.getClient().on('message', async (message: Message) => {
       //#region check allow handle message
@@ -56,47 +60,67 @@ export class OnCommandResolver implements MethodResolver {
       }
       //#endregion
 
-      let messageContent = message.content.trim();
-      const messagePrefix = this.getPrefix(messageContent, prefix);
-      const commandName = this.getCommandName(
-        messageContent,
-        messagePrefix.length,
-      );
-      if (messagePrefix !== prefix || commandName !== name) {
-        return; // not suitable for handler
+      let messageContent = message.content;
+      let groups: { [key: string]: string } = {};
+      if (regex instanceof RegExp) {
+        if (regex.test(messageContent)) {
+          regex.lastIndex = 0;
+          const matches = regex.exec(messageContent);
+          groups = matches?.groups;
+        } else {
+          return;
+        }
+      } else {
+        messageContent = message.content.trim();
+        const messagePrefix = this.getPrefix(messageContent, prefix);
+        const commandName = this.getCommandName(
+          messageContent,
+          messagePrefix.length,
+        );
+        if (messagePrefix !== prefix || commandName !== name) {
+          return; // not suitable for handler
+        }
+        ///#region handle message
+        if (isRemovePrefix) {
+          messageContent = messageContent.slice(prefix.length);
+        }
+        if (isRemoveCommandName) {
+          if (isRemovePrefix) {
+            messageContent = messageContent.slice(
+              prefix.length + commandName.length,
+            );
+          } else {
+            messageContent =
+              messageContent.substring(0, prefix.length) +
+              messageContent.substring(prefix.length + commandName.length);
+          }
+        }
+        messageContent = messageContent.trim();
+        //#endregion
       }
 
       let allowCommandOptions: DiscordModuleCommandOptions[];
       if (allowChannels || allowUsers) {
-        allowCommandOptions = [{
-          name,
-          channels: allowChannels,
-          users: allowUsers
-        }];
+        allowCommandOptions = [
+          {
+            name,
+            channels: allowChannels,
+            users: allowUsers,
+          },
+        ];
       } else {
         allowCommandOptions = this.discordService.getAllowCommands();
       }
-      if (!this.discordAccessService.isAllowCommand(commandName, message.channel.id, message.author.id, allowCommandOptions)) {
+      if (
+        !this.discordAccessService.isAllowCommand(
+          name,
+          message.channel.id,
+          message.author.id,
+          allowCommandOptions,
+        )
+      ) {
         return;
       }
-
-      ///#region handle message
-      if (isRemovePrefix) {
-        messageContent = messageContent.slice(prefix.length);
-      }
-      if (isRemoveCommandName) {
-        if (isRemovePrefix) {
-          messageContent = messageContent.slice(
-            prefix.length + commandName.length,
-          );
-        } else {
-          messageContent =
-            messageContent.substring(0, prefix.length) +
-            messageContent.substring(prefix.length + commandName.length);
-        }
-      }
-      messageContent = messageContent.trim();
-      //#endregion
 
       //#region apply middleware, guard, pipe
       const eventName = 'message';
@@ -106,7 +130,7 @@ export class OnCommandResolver implements MethodResolver {
         instance,
         methodName,
         event: eventName,
-        context
+        context,
       });
       if (!isAllowFromGuards) {
         return;
@@ -123,7 +147,7 @@ export class OnCommandResolver implements MethodResolver {
           event: eventName,
           context,
           content: message.content,
-          type: paramType
+          type: paramType,
         });
         messageContent = pipeMessageContent ?? messageContent;
       } catch (err) {
@@ -136,13 +160,14 @@ export class OnCommandResolver implements MethodResolver {
         instance,
         methodName,
         context,
-        content: messageContent
+        content: messageContent,
+        groups,
       });
       const handlerArgs = argsFromDecorator ?? context;
       await this.discordHandlerService.callHandler(
         instance,
         methodName,
-        handlerArgs
+        handlerArgs,
       );
       if (isRemoveMessage) {
         await this.removeMessageFromChannel(message);

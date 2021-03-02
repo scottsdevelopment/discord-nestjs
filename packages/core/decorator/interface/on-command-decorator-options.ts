@@ -8,6 +8,11 @@ export interface OnCommandDecoratorOptions {
   name: string;
 
   /**
+   * Regular expressions
+   */
+  regex?: RegExp;
+
+  /**
    * Your message prefix
    * @default from module definition
    */

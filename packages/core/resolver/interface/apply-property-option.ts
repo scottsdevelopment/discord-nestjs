@@ -5,4 +5,5 @@ export interface ApplyPropertyOption {
   methodName: string;
   context: ClientEvents[keyof ClientEvents];
   content?: string;
+  groups?: { [key: string]: string };
 }
